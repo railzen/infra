@@ -4,8 +4,15 @@
 // and a certificate trust list that ignores the Windows certificate store.
 package main
 
-import "intra/internal/app"
+import (
+	"intra/internal/app"
+	"intra/internal/update"
+)
 
 var version = "1.0.0"
 
-func main() { app.Run(version) }
+func main() {
+	if !update.HandleArgs() {
+		app.Run(version)
+	}
+}

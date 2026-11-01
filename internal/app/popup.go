@@ -130,6 +130,9 @@ func (p *popup) openPanel(kind, arg string) {
 // relayout lets the page render a new panel and report its height before the
 // window shows it, so it never flashes at the previous panel's size.
 func (p *popup) relayout(kind string) {
+	if p.kind == "about" && kind != "about" {
+		p.w.resetUpdateNotice()
+	}
 	s := p.w.scale()
 	p.kind = kind
 	p.pending = true
@@ -190,6 +193,9 @@ func (p *popup) sized(kind string, hCSS float64) {
 func (p *popup) hide() {
 	if p == nil || !p.open {
 		return
+	}
+	if p.kind == "about" {
+		p.w.resetUpdateNotice()
 	}
 	p.open = false
 	p.pending = false

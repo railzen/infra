@@ -25,12 +25,14 @@ type Window struct {
 	uiReady bool
 	menu    *popup
 
-	page, pageArg string
-	cur           *siteState
-	active        bool
-	closing       bool
-	focusPending  bool
-	grab          pointerGrab
+	page, pageArg   string
+	cur             *siteState
+	active          bool
+	closing         bool
+	focusPending    bool
+	upToDate        bool
+	updateMenuEpoch uint64
+	grab            pointerGrab
 }
 
 // pointerGrab is the pointer gesture currently moving or resizing the window
@@ -512,6 +514,7 @@ func (w *Window) updateTitle() {
 func (w *Window) state() *stateMsg {
 	s := w.a.baseState()
 	s.Current, s.Page, s.PageArg, s.Active = w.cur, w.page, w.pageArg, w.active
+	s.Update.UpToDate = w.upToDate
 	if w.menu != nil {
 		s.MenuOpen, s.MenuKind, s.MenuArg = w.menu.open, w.menu.kind, w.menu.arg
 		if w.menu.open && w.menu.kind == "certificate" && w.cur != nil && w.a.proxy != nil {

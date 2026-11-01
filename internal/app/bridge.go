@@ -190,6 +190,10 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 		a.post(func() { a.exportConfig(w) })
 	case "importConfig":
 		a.post(func() { a.importConfig(w) })
+	case "checkUpdate":
+		a.checkForUpdates(w)
+	case "installUpdate":
+		a.installUpdate()
 	}
 }
 

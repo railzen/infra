@@ -17,6 +17,7 @@ import (
 
 	"intra/internal/config"
 	"intra/internal/netx"
+	"intra/internal/update"
 )
 
 const (
@@ -36,13 +37,15 @@ type siteState struct {
 
 // App holds what all windows share: configuration, the proxy and saving.
 type App struct {
-	version    string
-	store      *config.Store
-	cfg        *config.Config
-	proxy      *netx.Proxy
-	wv2Version string
-	dataDir    string
-	args       []string
+	version         string
+	store           *config.Store
+	cfg             *config.Config
+	proxy           *netx.Proxy
+	wv2Version      string
+	dataDir         string
+	args            []string
+	updateState     updateState
+	availableUpdate *update.Release
 
 	msgHwnd uintptr // message-only window that runs posted functions
 	windows []*Window
@@ -509,6 +512,7 @@ type caView struct {
 
 type stateMsg struct {
 	T         string            `json:"t"`
+	Update    updateState       `json:"update"`
 	Bookmarks []config.Bookmark `json:"bookmarks"`
 	CAs       []caView          `json:"cas"`
 	Settings  struct {
@@ -537,7 +541,7 @@ type stateMsg struct {
 
 // baseState fills the fields every window shares.
 func (a *App) baseState() *stateMsg {
-	s := &stateMsg{T: "state", Bookmarks: a.cfg.Bookmarks, CAs: []caView{}}
+	s := &stateMsg{T: "state", Update: a.updateState, Bookmarks: a.cfg.Bookmarks, CAs: []caView{}}
 	if s.Bookmarks == nil {
 		s.Bookmarks = []config.Bookmark{}
 	}
