@@ -226,6 +226,19 @@ body.menu .toast { bottom: 12px; font-size: 12px; padding: 6px 12px; }
   border: 1px solid var(--border); background: var(--surface-2); color: var(--secondary); font-size: 12.5px;
 }
 .addr-input:focus { border-color: color-mix(in srgb, var(--fg) 30%, transparent); background: var(--bg); color: var(--fg); }
+.addr .cert-button { width: 28px; height: 28px; flex: none; }
+.dd.dd-certificate { padding: 12px 16px 16px; }
+.cert-status { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
+.cert-status.ok { color: var(--ok); }
+.cert-status.err { color: var(--danger); }
+.cert-host { font-size: 13px; color: var(--secondary); word-break: break-all; margin-bottom: 12px; user-select: text; }
+.cert-fields { margin: 8px 0; user-select: text; }
+.cert-fields dt { color: var(--tertiary); font-size: 11.5px; margin-top: 8px; }
+.cert-fields dd { margin: 2px 0 0; font-size: 12px; line-height: 1.55; word-break: break-word; white-space: pre-wrap; }
+.cert-fields .fingerprint { font-family: ui-monospace, Consolas, monospace; word-break: break-all; }
+.cert-chain { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+.cert-chain summary { cursor: pointer; font-size: 13px; }
+.cert-note { color: var(--tertiary); font-size: 11.5px; line-height: 1.55; margin: 10px 0 0; }
 .ctx {
   position: fixed; z-index: 50; min-width: 156px; padding: 4px;
   background: var(--elevated); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: var(--shadow);
@@ -466,7 +479,7 @@ function renderBar() {
   document.body.classList.toggle("maximized", !!S.maximized);
   document.body.classList.toggle("inactive", S.active === false);
   const open = (k) => !!S.menuOpen && S.menuKind === k;
-  $("#m-fav").classList.toggle("sel", open("links") || open("bookmarks") || open("edit") || (!S.menuOpen && ["home", "bookmarks"].includes(S.page)));
+  $("#m-fav").classList.toggle("sel", open("links") || open("certificate") || open("bookmarks") || open("edit") || (!S.menuOpen && ["home", "bookmarks"].includes(S.page)));
   $("#m-set").classList.toggle("sel", open("settings"));
   $("#m-about").classList.toggle("sel", open("about"));
   const c = S.current;
@@ -825,6 +838,17 @@ function ctxMenuHTML() {
     </div>`;
 }
 
+function certificateFields(c) {
+  return `<dl class="cert-fields">
+    <dt>颁发给</dt><dd>${esc(c.subject)}</dd>
+    <dt>颁发者</dt><dd>${esc(c.issuer)}</dd>
+    <dt>有效期</dt><dd>${esc(c.notBefore)} 至 ${esc(c.notAfter)}</dd>
+    ${c.dnsNames?.length ? `<dt>适用域名 / IP</dt><dd>${esc(c.dnsNames.join("\n"))}</dd>` : ""}
+    <dt>序列号</dt><dd class="fingerprint">${esc(c.serial)}</dd>
+    <dt>SHA-256 指纹</dt><dd class="fingerprint">${esc(c.fingerprint)}</dd>
+  </dl>`;
+}
+
 const PANELS = {
   links() {
     const bs = S.bookmarks, cur = S.current?.id;
@@ -841,6 +865,7 @@ const PANELS = {
     return `
       ${S.current ? `
         <div class="addr">
+          <button class="tool cert-button" id="addr-cert" title="查看网站证书" aria-label="查看网站证书">${I.shield}</button>
           <input class="addr-input" id="addr" value="${esc(S.current.url || S.current.name)}" spellcheck="false" autocomplete="off" title="输入地址后按回车在当前窗口打开">
           <button class="tool" id="addr-copy" title="复制地址">${I.copy}</button>
         </div>
@@ -857,6 +882,28 @@ const PANELS = {
         <button class="dd-item" id="dd-add">${I.plus}<span>添加网站</span></button>
         <button class="dd-item" id="dd-manage">${I.list}<span>管理收藏夹</span></button>
       </div>`;
+  },
+
+  certificate() {
+    const c = S.certificate, url = S.current?.url || "";
+    const https = /^https:\/\//i.test(url);
+    const title = !https ? "未使用 HTTPS" : !c ? "暂无证书信息" : c.verified ? "证书校验通过" : "证书校验失败";
+    const status = !c || !https ? "" : c.verified ? "ok" : "err";
+    return `<div class="pn-head"><button class="back" id="cert-back">${I.back}<span>返回</span></button><div class="pn-title">网站证书</div></div>
+      <div class="cert-status ${status}">${I.shield}<span>${title}</span></div>
+      <div class="cert-host">${esc(https && c ? c.host : hostOf(url))}</div>
+      ${!https ? `<div class="cert-note">此页面通过明文 HTTP 或非 HTTPS 地址打开，没有网站 TLS 证书。</div>` : !c ? `<div class="cert-note">尚未记录该站点的 TLS 连接。刷新页面后可再次查看。</div>` : `
+        <dl class="cert-fields">
+          ${c.remoteAddress ? `<dt>连接地址</dt><dd>${esc(c.remoteAddress)}</dd>` : ""}
+          ${c.tlsVersion ? `<dt>协议</dt><dd>${esc(c.tlsVersion)}</dd>` : ""}
+          ${c.verified ? `<dt>信任来源</dt><dd>${c.trustSource === "builtin" ? "内置 Mozilla 公共 CA" : "手动导入的 CA"}</dd>` : ""}
+          ${c.error ? `<dt>校验错误</dt><dd>${esc(c.error)}</dd>` : ""}
+          <dt>最近连接时间</dt><dd>${esc(new Date(c.observedAt).toLocaleString())}</dd>
+        </dl>
+        ${c.chain.map((cert, i) => `<details class="cert-chain" ${i === 0 ? "open" : ""}><summary>${i === 0 ? "网站证书" : `证书链 · ${i + 1}`}</summary>${certificateFields(cert)}</details>`).join("")}
+        ${c.trustAnchor ? `<details class="cert-chain"><summary>信任根证书</summary>${certificateFields(c.trustAnchor)}</details>` : ""}
+        <p class="cert-note">显示该站点最近一次连接中收到的上游证书。</p>
+      `}`;
   },
 
   settings() {
@@ -953,6 +1000,7 @@ const PANEL_BIND = {
     $("#dd-manage").onclick = () => S.current ? panel("bookmarks") : send({ t: "show", page: "bookmarks", arg: "" });
     const addr = $("#addr");
     if (addr) {
+      $("#addr-cert").onclick = () => panel("certificate");
       addr.onfocus = () => addr.select();
       addr.oninput = () => (addrEditing = true);
       addr.onkeydown = (e) => {
@@ -977,6 +1025,10 @@ const PANEL_BIND = {
         else send({ t: "open", id, where: act === "here" ? "current" : "new" });
       }));
     }
+  },
+  certificate() {
+    $("#cert-back").onclick = () => panel("links");
+    document.querySelectorAll(".cert-chain").forEach((el) => (el.ontoggle = sendMenuSize));
   },
   settings() {
     const set = (p) => {

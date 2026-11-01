@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,10 +17,12 @@ import (
 // It applies the custom DNS table and validates upstream TLS against the
 // embedded Mozilla roots plus user imported CAs only.
 type Proxy struct {
-	ln  net.Listener
-	ca  *localCA
-	srv *http.Server
-	rp  *httputil.ReverseProxy
+	ln           net.Listener
+	ca           *localCA
+	srv          *http.Server
+	rp           *httputil.ReverseProxy
+	certMu       sync.Mutex
+	certificates map[string]*CertificateInfo
 }
 
 // Start listens on a random loopback port.
@@ -136,7 +139,7 @@ func (p *Proxy) mitm(client net.Conn, hostport string) {
 			if sni == "" {
 				sni = connectHost
 			}
-			upstream, upErr = dialUpstreamTLS(sni, port, hello.SupportedProtos)
+			upstream, upErr = p.dialUpstreamTLS(sni, port, hello.SupportedProtos)
 			protos := []string{"http/1.1"}
 			if upErr == nil {
 				if np := upstream.ConnectionState().NegotiatedProtocol; np != "" {
@@ -172,11 +175,12 @@ func (p *Proxy) mitm(client net.Conn, hostport string) {
 	relay(tc, upstream)
 }
 
-func dialUpstreamTLS(host, port string, clientProtos []string) (*tls.Conn, error) {
+func (p *Proxy) dialUpstreamTLS(host, port string, clientProtos []string) (*tls.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	raw, err := Dial(ctx, "tcp", net.JoinHostPort(host, port))
 	if err != nil {
+		p.recordTLS(host, port, "", tls.ConnectionState{}, err)
 		return nil, err
 	}
 	var alpn []string
@@ -191,7 +195,9 @@ func dialUpstreamTLS(host, port string, clientProtos []string) (*tls.Conn, error
 		NextProtos: alpn,
 		MinVersion: tls.VersionTLS12,
 	})
-	if err := uc.HandshakeContext(ctx); err != nil {
+	err = uc.HandshakeContext(ctx)
+	p.recordTLS(host, port, raw.RemoteAddr().String(), uc.ConnectionState(), err)
+	if err != nil {
 		raw.Close()
 		return nil, err
 	}

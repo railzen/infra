@@ -517,15 +517,16 @@ type stateMsg struct {
 		MinimizeToTray       bool   `json:"minimizeToTray"`
 		OpenLinksInNewWindow bool   `json:"openLinksInNewWindow"`
 	} `json:"settings"`
-	Current   *siteState `json:"current"`
-	Page      string     `json:"page"`
-	PageArg   string     `json:"pageArg"`
-	MenuOpen  bool       `json:"menuOpen"`
-	MenuKind  string     `json:"menuKind"`
-	MenuArg   string     `json:"menuArg"`
-	Maximized bool       `json:"maximized"`
-	Active    bool       `json:"active"`
-	Info      struct {
+	Current     *siteState            `json:"current"`
+	Certificate *netx.CertificateInfo `json:"certificate,omitempty"`
+	Page        string                `json:"page"`
+	PageArg     string                `json:"pageArg"`
+	MenuOpen    bool                  `json:"menuOpen"`
+	MenuKind    string                `json:"menuKind"`
+	MenuArg     string                `json:"menuArg"`
+	Maximized   bool                  `json:"maximized"`
+	Active      bool                  `json:"active"`
+	Info        struct {
 		Version    string `json:"version"`
 		RootCount  int    `json:"rootCount"`
 		BundleDate string `json:"bundleDate"`

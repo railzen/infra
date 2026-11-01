@@ -56,6 +56,23 @@ func TestCustomDNSAndCA(t *testing.T) {
 	if resp.StatusCode != 502 || !strings.Contains(string(body), "证书不受信任") {
 		t.Fatalf("expected untrusted error page, got %d %q", resp.StatusCode, body[:min(200, len(body))])
 	}
+	address := "https://example.com:" + port + "/"
+	info := p.Certificate(address)
+	if info == nil || info.Verified || info.Error == "" || len(info.Chain) == 0 ||
+		info.Chain[0].Fingerprint != Fingerprint(upstream.Certificate()) || info.TrustAnchor != nil ||
+		info.RemoteAddress != upstream.Listener.Addr().String() || info.ObservedAt.IsZero() {
+		t.Fatalf("rejected upstream certificate: %+v", info)
+	}
+	if p.Certificate("http://example.com:"+port) != nil || p.Certificate("https://example.com:1") != nil ||
+		p.Certificate("https://other.example.com:"+port) != nil {
+		t.Fatal("certificate must match the HTTPS origin, including its port")
+	}
+	// A caller cannot alter the shared snapshot or its certificate fields.
+	info.Chain[0].Subject = "changed"
+	info.Chain[0].DNSNames[0] = "changed"
+	if again := p.Certificate("https://EXAMPLE.COM.:" + port); again.Chain[0].Subject == "changed" || again.Chain[0].DNSNames[0] == "changed" {
+		t.Fatal("certificate snapshot shares mutable data")
+	}
 
 	// import the CA -> success through CNAME and wildcard
 	SetExtraRoots([]*x509.Certificate{upstream.Certificate()})
@@ -72,6 +89,25 @@ func TestCustomDNSAndCA(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.HasPrefix(string(body), "hello from") {
 		t.Fatalf("expected success, got %d %q", resp.StatusCode, body)
+	}
+	info = p.Certificate(address)
+	if info == nil || !info.Verified || info.Error != "" || info.TrustSource != "imported" ||
+		info.TrustAnchor == nil || info.TrustAnchor.Fingerprint != Fingerprint(upstream.Certificate()) {
+		t.Fatalf("imported upstream trust anchor: %+v", info)
+	}
+
+	// A later failed handshake must replace the earlier success, not retain its
+	// green status or trusted anchor. Force a new connection after removing the CA.
+	c.Transport.(*http.Transport).CloseIdleConnections()
+	SetExtraRoots(nil)
+	resp, err = c.Get(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	info = p.Certificate(address)
+	if resp.StatusCode != 502 || info.Verified || info.TrustSource != "" || info.TrustAnchor != nil {
+		t.Fatalf("stale trusted status after failed handshake: %+v", info)
 	}
 }
 

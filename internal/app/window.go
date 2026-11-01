@@ -514,6 +514,9 @@ func (w *Window) state() *stateMsg {
 	s.Current, s.Page, s.PageArg, s.Active = w.cur, w.page, w.pageArg, w.active
 	if w.menu != nil {
 		s.MenuOpen, s.MenuKind, s.MenuArg = w.menu.open, w.menu.kind, w.menu.arg
+		if w.menu.open && w.menu.kind == "certificate" && w.cur != nil && w.a.proxy != nil {
+			s.Certificate = w.a.proxy.Certificate(normalizeURL(w.cur.URL))
+		}
 	}
 	s.Maximized = w.hwnd != 0 && isZoomed(w.hwnd)
 	return s

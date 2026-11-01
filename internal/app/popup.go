@@ -12,7 +12,7 @@ import (
 )
 
 // dropdown widths in DIPs, by kind
-var popupWidths = map[string]float64{"links": 320, "settings": 420, "about": 340, "bookmarks": 520, "edit": 480}
+var popupWidths = map[string]float64{"links": 320, "certificate": 420, "settings": 420, "about": 340, "bookmarks": 520, "edit": 480}
 
 // panels that float centered below the title bar instead of hanging from a menu button
 var centeredPanels = map[string]bool{"bookmarks": true, "edit": true}
@@ -114,7 +114,7 @@ func (p *popup) toggle(kind string, xCSS, yCSS float64) {
 // openPanel shows the link manager or editor, also when switching to it from
 // another panel of this popup.
 func (p *popup) openPanel(kind, arg string) {
-	if p.hwnd == 0 || !p.ready || !centeredPanels[kind] {
+	if p.hwnd == 0 || !p.ready || (!centeredPanels[kind] && kind != "certificate" && kind != "links") {
 		return
 	}
 	p.arg = arg
