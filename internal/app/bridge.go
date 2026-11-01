@@ -20,26 +20,27 @@ import (
 )
 
 type inMsg struct {
-	T              string `json:"t"`
-	X, Y, H        float64
-	X0, Y0         float64
-	Edge           string           `json:"edge"`
-	Where          string           `json:"where"`
-	Kind           string           `json:"kind"`
-	Page           string           `json:"page"`
-	Arg            string           `json:"arg"`
-	Back           string           `json:"back"`
-	ID             string           `json:"id"`
-	Action         string           `json:"action"`
-	Index          int              `json:"index"`
-	Bookmark       *config.Bookmark `json:"bookmark"`
-	Open           bool             `json:"open"`
-	DefaultPage    string           `json:"defaultPage"`
-	RememberWindow bool             `json:"rememberWindow"`
-	MinimizeToTray bool             `json:"minimizeToTray"`
-	Name           string           `json:"name"`
-	Data           string           `json:"data"`
-	URL            string           `json:"url"`
+	T                    string `json:"t"`
+	X, Y, H              float64
+	X0, Y0               float64
+	Edge                 string           `json:"edge"`
+	Where                string           `json:"where"`
+	Kind                 string           `json:"kind"`
+	Page                 string           `json:"page"`
+	Arg                  string           `json:"arg"`
+	Back                 string           `json:"back"`
+	ID                   string           `json:"id"`
+	Action               string           `json:"action"`
+	Index                int              `json:"index"`
+	Bookmark             *config.Bookmark `json:"bookmark"`
+	Open                 bool             `json:"open"`
+	DefaultPage          string           `json:"defaultPage"`
+	RememberWindow       bool             `json:"rememberWindow"`
+	MinimizeToTray       bool             `json:"minimizeToTray"`
+	OpenLinksInNewWindow bool             `json:"openLinksInNewWindow"`
+	Name                 string           `json:"name"`
+	Data                 string           `json:"data"`
+	URL                  string           `json:"url"`
 }
 
 // onMessage handles a message from this window's UI view or dropdown.
@@ -171,6 +172,7 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 		a.cfg.DefaultPage = dp
 		a.cfg.RememberWindow = m.RememberWindow
 		a.cfg.MinimizeToTray = m.MinimizeToTray
+		a.cfg.OpenLinksInNewWindow = m.OpenLinksInNewWindow
 		if !m.RememberWindow {
 			a.cfg.Window = nil
 			for i := range a.cfg.Bookmarks {
@@ -293,6 +295,7 @@ func (a *App) mergeImport(e *config.ExportFormat) (added, updated, cas, skipped 
 	}
 	a.cfg.RememberWindow = e.Settings.RememberWindow
 	a.cfg.MinimizeToTray = e.Settings.MinimizeToTray
+	a.cfg.OpenLinksInNewWindow = e.Settings.OpenLinksInNewWindow
 	if dp := e.Settings.DefaultPage; dp == "home" || dp == "last" || a.cfg.Bookmark(dp) != nil {
 		a.cfg.DefaultPage = dp
 	}

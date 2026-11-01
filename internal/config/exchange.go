@@ -13,9 +13,10 @@ type ExportFormat struct {
 	Version    int    `json:"version"`
 	ExportedAt string `json:"exportedAt"`
 	Settings   struct {
-		DefaultPage    string `json:"defaultPage"`
-		RememberWindow bool   `json:"rememberWindow"`
-		MinimizeToTray bool   `json:"minimizeToTray"`
+		DefaultPage          string `json:"defaultPage"`
+		RememberWindow       bool   `json:"rememberWindow"`
+		MinimizeToTray       bool   `json:"minimizeToTray"`
+		OpenLinksInNewWindow bool   `json:"openLinksInNewWindow"`
 	} `json:"settings"`
 	Bookmarks []Bookmark   `json:"bookmarks"`
 	CAs       []ExportedCA `json:"cas"`
@@ -34,6 +35,7 @@ func (c *Config) Export() ([]byte, error) {
 	e.Settings.DefaultPage = c.DefaultPage
 	e.Settings.RememberWindow = c.RememberWindow
 	e.Settings.MinimizeToTray = c.MinimizeToTray
+	e.Settings.OpenLinksInNewWindow = c.OpenLinksInNewWindow
 	e.Bookmarks = append([]Bookmark{}, c.Bookmarks...)
 	for i := range e.Bookmarks {
 		e.Bookmarks[i].Window = nil
@@ -52,6 +54,7 @@ func (c *Config) Export() ([]byte, error) {
 func ParseExport(data []byte) (*ExportFormat, error) {
 	data = trimBOM(data)
 	var e ExportFormat
+	e.Settings.OpenLinksInNewWindow = true
 	if err := json.Unmarshal(data, &e); err != nil {
 		return nil, errors.New("不是有效的 JSON 文件")
 	}

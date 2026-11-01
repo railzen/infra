@@ -512,9 +512,10 @@ type stateMsg struct {
 	Bookmarks []config.Bookmark `json:"bookmarks"`
 	CAs       []caView          `json:"cas"`
 	Settings  struct {
-		DefaultPage    string `json:"defaultPage"`
-		RememberWindow bool   `json:"rememberWindow"`
-		MinimizeToTray bool   `json:"minimizeToTray"`
+		DefaultPage          string `json:"defaultPage"`
+		RememberWindow       bool   `json:"rememberWindow"`
+		MinimizeToTray       bool   `json:"minimizeToTray"`
+		OpenLinksInNewWindow bool   `json:"openLinksInNewWindow"`
 	} `json:"settings"`
 	Current   *siteState `json:"current"`
 	Page      string     `json:"page"`
@@ -550,6 +551,7 @@ func (a *App) baseState() *stateMsg {
 	s.Settings.DefaultPage = a.cfg.DefaultPage
 	s.Settings.RememberWindow = a.cfg.RememberWindow
 	s.Settings.MinimizeToTray = a.cfg.MinimizeToTray
+	s.Settings.OpenLinksInNewWindow = a.cfg.OpenLinksInNewWindow
 	s.Info.Version = a.version
 	s.Info.RootCount = netx.BuiltinRootCount()
 	s.Info.BundleDate = netx.BundleDate()

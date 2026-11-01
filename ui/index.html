@@ -872,6 +872,8 @@ const PANELS = {
         <button class="switch" role="switch" id="s-remember" aria-checked="${!!st.rememberWindow}"></button></div>
       <div class="pp-row"><span class="grow">最小化时隐藏到托盘</span>
         <button class="switch" role="switch" id="s-tray" aria-checked="${!!st.minimizeToTray}"></button></div>
+      <div class="pp-row"><span class="grow" id="s-open-new-label">点击收藏时在新窗口打开</span>
+        <button class="switch" role="switch" id="s-open-new" aria-labelledby="s-open-new-label" aria-checked="${!!st.openLinksInNewWindow}"></button></div>
       <div class="dd-sep"></div>
       <div class="dd-label pp-sec"><span class="grow">证书</span>
         <button class="btn sm" id="addca">${I.plus}添加 CA</button>
@@ -938,7 +940,7 @@ const PANEL_BIND = {
       el.onclick = (e) => {
         const ed = e.target.closest("[data-edit]");
         if (ed) { editBack = ""; panel("edit", ed.dataset.edit); }
-        else send({ t: "open", id: el.dataset.open });
+        else send({ t: "open", id: el.dataset.open, where: S.settings.openLinksInNewWindow ? "new" : "current" });
       };
       el.oncontextmenu = (e) => {
         e.preventDefault();
@@ -979,11 +981,12 @@ const PANEL_BIND = {
   settings() {
     const set = (p) => {
       const st = S.settings;
-      send({ t: "settings", defaultPage: st.defaultPage, rememberWindow: !!st.rememberWindow, minimizeToTray: !!st.minimizeToTray, ...p });
+      send({ t: "settings", defaultPage: st.defaultPage, rememberWindow: !!st.rememberWindow, minimizeToTray: !!st.minimizeToTray, openLinksInNewWindow: !!st.openLinksInNewWindow, ...p });
     };
     $("#s-default").onchange = (e) => set({ defaultPage: e.target.value });
     $("#s-remember").onclick = () => set({ rememberWindow: !S.settings.rememberWindow });
     $("#s-tray").onclick = () => set({ minimizeToTray: !S.settings.minimizeToTray });
+    $("#s-open-new").onclick = () => set({ openLinksInNewWindow: !S.settings.openLinksInNewWindow });
     $("#addca").onclick = () => $("#cafile").click();
     $("#cfg-import").onclick = () => send({ t: "importConfig" });
     $("#cfg-export").onclick = () => send({ t: "exportConfig" });
@@ -1055,7 +1058,7 @@ function setupMenu() {
     else if (e.key === "Escape") send({ t: "menuClose" });
     else if (e.key === "ArrowDown" && n) { kbIndex = (kbIndex + 1) % n; renderMenu(); }
     else if (e.key === "ArrowUp" && n) { kbIndex = (kbIndex - 1 + n) % n; renderMenu(); }
-    else if (e.key === "Enter" && kbIndex >= 0 && kbIndex < n) send({ t: "open", id: S.bookmarks[kbIndex].id });
+    else if (e.key === "Enter" && kbIndex >= 0 && kbIndex < n) send({ t: "open", id: S.bookmarks[kbIndex].id, where: S.settings.openLinksInNewWindow ? "new" : "current" });
     else return;
     e.preventDefault();
   });

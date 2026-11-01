@@ -47,16 +47,17 @@ type WindowState struct {
 type Config struct {
 	Bookmarks []Bookmark `json:"bookmarks"`
 	// DefaultPage: "home" (favorites overview), "last" (last opened bookmark) or a bookmark ID.
-	DefaultPage    string       `json:"defaultPage"`
-	RememberWindow bool         `json:"rememberWindow"`
-	MinimizeToTray bool         `json:"minimizeToTray"` // a minimized window hides in the tray
-	Window         *WindowState `json:"window,omitempty"`
-	LastBookmark   string       `json:"lastBookmark,omitempty"`
-	CAs            []CA         `json:"cas"`
+	DefaultPage          string       `json:"defaultPage"`
+	RememberWindow       bool         `json:"rememberWindow"`
+	MinimizeToTray       bool         `json:"minimizeToTray"` // a minimized window hides in the tray
+	OpenLinksInNewWindow bool         `json:"openLinksInNewWindow"`
+	Window               *WindowState `json:"window,omitempty"`
+	LastBookmark         string       `json:"lastBookmark,omitempty"`
+	CAs                  []CA         `json:"cas"`
 }
 
 func Default() *Config {
-	return &Config{DefaultPage: "home", RememberWindow: true}
+	return &Config{DefaultPage: "home", RememberWindow: true, OpenLinksInNewWindow: true}
 }
 
 func (c *Config) Clone() *Config {
@@ -116,7 +117,9 @@ type CorruptError struct {
 	Err  error
 }
 
-func (e *CorruptError) Error() string { return fmt.Sprintf("配置文件 %s 已损坏: %v", e.Path, e.Err) }
+func (e *CorruptError) Error() string {
+	return fmt.Sprintf("配置文件 %s 已损坏: %v", e.Path, e.Err)
+}
 func (e *CorruptError) Unwrap() error { return e.Err }
 
 // Quarantine renames an unreadable configuration file so a fresh one can be
