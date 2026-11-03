@@ -9,7 +9,6 @@ import (
 	"errors"
 	"strings"
 	"sync/atomic"
-	"time"
 )
 
 // cacert.pem is Mozilla's public root program, extracted by curl.se.
@@ -115,21 +114,4 @@ func DisplayName(c *x509.Certificate) string {
 		return c.Subject.Organization[0]
 	}
 	return c.Subject.String()
-}
-
-// BundleDate returns the "as of" date line from the embedded Mozilla bundle.
-func BundleDate() string {
-	const marker = "Certificate data from Mozilla as of: "
-	s := string(mozillaBundle[:min(len(mozillaBundle), 1024)])
-	if i := strings.Index(s, marker); i >= 0 {
-		rest := s[i+len(marker):]
-		if j := strings.IndexByte(rest, '\n'); j >= 0 {
-			rest = rest[:j]
-		}
-		if t, err := time.Parse("Mon Jan 2 15:04:05 2006 MST", strings.TrimSpace(rest)); err == nil {
-			return t.Format("2006-01-02")
-		}
-		return strings.TrimSpace(rest)
-	}
-	return ""
 }

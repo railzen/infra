@@ -534,7 +534,6 @@ type stateMsg struct {
 	Info        struct {
 		Version    string `json:"version"`
 		RootCount  int    `json:"rootCount"`
-		BundleDate string `json:"bundleDate"`
 		ConfigPath string `json:"configPath"`
 		WebView2   string `json:"webview2"`
 	} `json:"info"`
@@ -560,7 +559,6 @@ func (a *App) baseState() *stateMsg {
 	s.Settings.OpenLinksInNewWindow = a.cfg.OpenLinksInNewWindow
 	s.Info.Version = a.version
 	s.Info.RootCount = netx.BuiltinRootCount()
-	s.Info.BundleDate = netx.BundleDate()
 	s.Info.ConfigPath = a.store.Path()
 	s.Info.WebView2 = a.wv2Version
 	return s

@@ -1015,11 +1015,9 @@ const PANELS = {
     return `
       <div class="pa-top">${LOGO}<div class="grow"><div class="pa-name">Intra</div><div class="pa-ver">版本 ${esc(info.version)}${hasUpdate ? ` · 新版 ${esc(update.version)}` : ""}</div></div>
         <button class="btn sm${hasUpdate ? " primary" : ""}" id="update-action" ${update.checking || update.downloading || (!hasUpdate && update.upToDate) ? "disabled" : ""}>${btnText}</button></div>
-      <p class="pa-lead">把网站当作本机应用打开。为每个网站自定义名称、网址和 DNS 记录，并使用独立、可控的证书信任列表。</p>
+      <p class="pa-lead">把网站当作本机应用打开。为每个网站自定义名称、网址和 DNS 记录。</p>
       <div class="dd-sep"></div>
       <div class="pa-kv"><span class="k">浏览器内核</span><span class="v">WebView2 ${esc(info.webview2)}</span></div>
-      <div class="pa-kv"><span class="k">证书信任</span><span class="v">Mozilla 公共根证书 ${info.rootCount} 个（${esc(info.bundleDate)}）+ 自定义 CA ${S.cas.length} 个</span></div>
-      <div class="pa-kv"><span class="k">系统证书库</span><span class="v">不使用</span></div>
       <div class="pa-kv"><span class="k">配置文件</span><span class="v trunc" title="${esc(info.configPath)}">${esc(info.configPath)}</span></div>`;
   },
 };
