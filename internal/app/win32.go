@@ -145,6 +145,7 @@ const (
 	smCxSmIcon      = 49
 
 	scMove         = 0xF010
+	scKeyMenu      = 0xF100
 	scSize         = 0xF000
 	scMinimize     = 0xF020
 	scMaximize     = 0xF030

@@ -40,6 +40,13 @@ type sizeMoveLog struct {
 // true when the command was consumed.
 func (w *Window) onSysCommand(wp, lp uintptr) bool {
 	switch cmd := wp & 0xFFF0; cmd {
+	case scKeyMenu:
+		// Alt or F10 alone (lp 0) would enter menu mode for a menu bar this
+		// window does not have; until the next key or click both webviews
+		// stop responding. Alt+Space (lp ' ') still opens the system menu.
+		if lp == 0 {
+			return true
+		}
 	case scMove, scSize:
 		// the low bits carry the hit-test code of a mouse press: HTCAPTION
 		// for a title bar drag, WMSZ_* for a frame edge; 0 from the keyboard
