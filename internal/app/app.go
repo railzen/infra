@@ -138,9 +138,6 @@ func Run(version string) {
 	}
 	a.dataDir = filepath.Join(local, config.AppDirName)
 	os.MkdirAll(a.dataDir, 0o755)
-	if os.Getenv("INTRA_LOG") == "" {
-		openDefaultLog(filepath.Join(a.dataDir, "intra.log"))
-	}
 	a.args = []string{
 		"--proxy-server=http://" + a.proxy.Addr(),
 		"--proxy-bypass-list=<-loopback>",
@@ -207,21 +204,6 @@ func (a *App) messageLoop() {
 		a.runQueue()
 		ev := a.queueEvent
 		pMsgWaitForMultipleObjectsEx.Call(1, uintptr(unsafe.Pointer(&ev)), infinite, qsAllInput, mwmoInputAvailable)
-	}
-}
-
-// openDefaultLog appends to the diagnostics log next to the WebView2 data. It
-// records window-chrome events (caption clicks, move loops, the watchdog) so a
-// stuck title bar can be traced afterwards; no addresses or page content.
-func openDefaultLog(path string) {
-	const maxSize = 1 << 20
-	flag := os.O_CREATE | os.O_WRONLY | os.O_APPEND
-	if fi, err := os.Stat(path); err == nil && fi.Size() > maxSize {
-		flag |= os.O_TRUNC
-	}
-	if f, err := os.OpenFile(path, flag, 0o644); err == nil {
-		log.SetOutput(f)
-		log.Printf("--- Intra %s started", theApp.version)
 	}
 }
 
