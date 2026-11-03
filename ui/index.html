@@ -40,6 +40,7 @@ body {
   user-select: none; cursor: default;
 }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+button svg { pointer-events: none; }
 input, select, textarea { font: inherit; color: inherit; }
 svg { display: block; flex: none; }
 
@@ -400,42 +401,63 @@ function barHTML() {
 
 function setupMain() {
   $("#root").innerHTML = barHTML();
-  const bar = $("#bar");
   document.addEventListener("contextmenu", (e) => { if (!e.target.closest("input,textarea")) e.preventDefault(); });
-  // Native app-region drag (WebView2 non-client regions) moves the window on
-  // Chromium's thread. The fallback below must not post WM_NCLBUTTONDOWN:
-  // that modal loop runs here while Chromium still holds the mouse, never
-  // sees button-up, and then swallows every later title-bar click. Hover
-  // keeps working because it is painted on the other thread.
-  if (!window.__INTRA_NATIVE_DRAG) {
+  const dragArea = $("[data-drag]");
+  if (window.__INTRA_NATIVE_DRAG) {
+    // WebView2 non-client regions: the drag area moves the window with the
+    // system move loop (snapping, Snap Assist, double-click, system menu).
+    // Go compares WebView2's hit-test window with where the area really is.
+    const report = () => {
+      const r = dragArea.getBoundingClientRect();
+      send({ t: "dragArea", x: r.left, y: r.top, w: r.width, h: r.height });
+    };
+    new ResizeObserver(report).observe(dragArea);
+    window.addEventListener("resize", report);
+  } else {
+    // Without non-client region support the window follows the pointer via
+    // SetWindowPos. Never post WM_NCLBUTTONDOWN here: its modal loop would run
+    // while Chromium holds the mouse, miss the button-up and swallow clicks.
     let drag = null;
-    bar.addEventListener("mousedown", (e) => {
-      if (e.button !== 0 || !e.target.closest("[data-drag]")) return;
-      if (e.detail === 2) { drag = null; send({ t: "gestureEnd" }); send({ t: "max" }); return; }
-      drag = { x: e.screenX, y: e.screenY };
-      send({ t: "drag", x: e.screenX, y: e.screenY, x0: drag.x, y0: drag.y });
+    dragArea.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      try { dragArea.setPointerCapture(e.pointerId); } catch {}
+      drag = { id: e.pointerId, x: e.screenX, y: e.screenY, moved: false };
     });
-    bar.addEventListener("contextmenu", (e) => {
-      if (e.target.closest("[data-drag]")) send({ t: "sysmenu" });
-    });
-    document.addEventListener("mousemove", (e) => {
-      if (!drag) return;
+    dragArea.addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
       if (!(e.buttons & 1)) { drag = null; send({ t: "gestureEnd" }); return; }
+      if (!drag.moved && Math.abs(e.screenX - drag.x) <= 2 && Math.abs(e.screenY - drag.y) <= 2) return;
+      drag.moved = true;
       send({ t: "drag", x: e.screenX, y: e.screenY, x0: drag.x, y0: drag.y });
     });
-    document.addEventListener("mouseup", () => { if (!drag) return; drag = null; send({ t: "gestureEnd" }); });
+    const endDrag = () => {
+      if (!drag) return;
+      const moved = drag.moved;
+      drag = null;
+      if (moved) send({ t: "gestureEnd" });
+    };
+    dragArea.addEventListener("pointerup", endDrag);
+    dragArea.addEventListener("pointercancel", endDrag);
+    dragArea.addEventListener("lostpointercapture", endDrag);
+    dragArea.addEventListener("dblclick", (e) => {
+      if (e.button !== 0) return;
+      drag = null;
+      send({ t: "gestureEnd" });
+      send({ t: "max" });
+    });
+    dragArea.addEventListener("contextmenu", () => send({ t: "sysmenu" }));
   }
   const resizeTop = $(".resize-top");
   let rz = null;
   resizeTop.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || document.body.classList.contains("maximized")) return;
-    resizeTop.setPointerCapture(e.pointerId);
+    try { resizeTop.setPointerCapture(e.pointerId); } catch {}
     const edge = e.target.dataset.resize || "top";
-    rz = { x: e.screenX, y: e.screenY, edge };
-    send({ t: "resize", edge, x: e.screenX, y: e.screenY, x0: e.screenX, y0: e.screenY });
+    rz = { id: e.pointerId, x: e.screenX, y: e.screenY, edge };
   });
   resizeTop.addEventListener("pointermove", (e) => {
-    if (!rz) return;
+    if (!rz || e.pointerId !== rz.id) return;
+    if (!(e.buttons & 1)) { rz = null; send({ t: "gestureEnd" }); return; }
     send({ t: "resize", edge: rz.edge, x: e.screenX, y: e.screenY, x0: rz.x, y0: rz.y });
   });
   const endResize = () => {
@@ -445,6 +467,7 @@ function setupMain() {
   };
   resizeTop.addEventListener("pointerup", endResize);
   resizeTop.addEventListener("pointercancel", endResize);
+  resizeTop.addEventListener("lostpointercapture", endResize);
   for (const [id, kind] of [["m-fav", "links"], ["m-set", "settings"], ["m-about", "about"]]) {
     $("#" + id).addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
@@ -455,9 +478,31 @@ function setupMain() {
   $("#n-back").onclick = () => send({ t: "nav", action: "back" });
   $("#n-fwd").onclick = () => send({ t: "nav", action: "forward" });
   $("#n-reload").onclick = () => send({ t: "nav", action: S.current?.loading ? "stop" : "reload" });
-  $("#c-min").onclick = () => send({ t: "min" });
-  $("#c-max").onclick = () => send({ t: "max" });
-  $("#c-close").onclick = () => send({ t: "close" });
+  for (const [id, t] of [["c-min", "min"], ["c-max", "max"], ["c-close", "close"]]) {
+    const btn = $("#" + id);
+    let armed = false, fired = false;
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      armed = true;
+      fired = false;
+      try { btn.setPointerCapture(e.pointerId); } catch {}
+    });
+    btn.addEventListener("pointerup", (e) => {
+      if (e.button !== 0 || !armed) return;
+      armed = false;
+      const r = btn.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        fired = true;
+        send({ t });
+      }
+    });
+    btn.addEventListener("pointercancel", () => { armed = false; });
+    btn.addEventListener("lostpointercapture", () => { armed = false; });
+    btn.onclick = () => {
+      if (fired) { fired = false; return; }
+      send({ t });
+    };
+  }
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && S.page && S.current) { e.preventDefault(); show(""); }
   });
@@ -497,7 +542,7 @@ function renderBar() {
   let title = "";
   if (S.page && (S.page !== "home" || c)) title = esc(PAGE_NAMES[S.page] || "");
   else if (c) title = (c.loading ? '<span class="spin"></span>' : "") + `<span class="trunc">${esc(c.title || c.name)}</span>`;
-  $("#title").innerHTML = title;
+  setIcon($("#title"), title);
 }
 
 function renderMain() {

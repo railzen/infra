@@ -199,6 +199,7 @@ func (a *App) messageLoop() {
 			}
 			pTranslateMessage.Call(ptr(&m))
 			pDispatchMessageW.Call(ptr(&m))
+			a.runQueue()
 		}
 		a.runQueue()
 		ev := a.queueEvent

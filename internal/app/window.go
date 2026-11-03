@@ -33,6 +33,10 @@ type Window struct {
 	upToDate        bool
 	updateMenuEpoch uint64
 	grab            pointerGrab
+
+	nativeDrag bool        // WebView2 non-client regions move the window
+	sizeMove   sizeMoveLog // the system move/size loop, watched for a lost button-up
+	drag       dragGuard   // keeps WebView2's drag window off the caption buttons
 }
 
 // pointerGrab is the pointer gesture currently moving or resizing the window
@@ -130,9 +134,10 @@ func (w *Window) embed() {
 	w.ui.SetBackgroundColour(r, g, b, 255)
 	lockDownUI(w.ui)
 	boot := `window.__INTRA_MODE="main"`
-	if enableTitlebarDrag(w.ui) {
+	if w.nativeDrag = enableTitlebarDrag(w.ui); w.nativeDrag {
 		// must be set before the document is created; the setting applies on navigation
 		boot += `;window.__INTRA_NATIVE_DRAG=1`
+		w.startDragPoll()
 	}
 	w.ui.Init(boot)
 	w.layout()
@@ -461,11 +466,33 @@ func (w *Window) requestFocus() {
 		}
 		w.layout()
 		if w.page == "" && w.cur != nil {
+			// a click on the bar activated the window: moving focus into the
+			// site now would pull it away between mouse-down and mouse-up
+			if w.sizeMove.active || (w.pointerInBar() && mouseDown()) {
+				return
+			}
 			w.focusSite()
 		} else if w.ui != nil && w.ui.GetController() != nil {
 			w.ui.Focus()
 		}
 	})
+}
+
+func (w *Window) pointerInBar() bool {
+	var pt, org point
+	pGetCursorPos.Call(ptr(&pt))
+	// from the client origin: a maximized window's frame starts above the screen
+	pClientToScreen.Call(w.hwnd, ptr(&org))
+	return pt.X >= org.X && pt.X < org.X+clientRect(w.hwnd).W() && pt.Y >= org.Y && pt.Y < org.Y+w.barPx()
+}
+
+func mouseDown() bool {
+	vk := uintptr(0x01) // VK_LBUTTON
+	if swapped, _, _ := pGetSystemMetrics.Call(23 /*SM_SWAPBUTTON*/); swapped != 0 {
+		vk = 0x02 // VK_RBUTTON
+	}
+	s, _, _ := pGetAsyncKeyState.Call(vk)
+	return s&0x8000 != 0
 }
 
 func (w *Window) focusSite() {
@@ -604,6 +631,7 @@ func mainWndProc(hwnd, m, wp, lp uintptr) uintptr {
 	case wmSize:
 		if w != nil {
 			w.layout()
+			w.scheduleDragCheck()
 			if w.menu != nil {
 				w.menu.hide()
 			}
@@ -660,8 +688,24 @@ func mainWndProc(hwnd, m, wp, lp uintptr) uintptr {
 				return 1
 			}
 		}
+	case wmEnterSizeMove:
+		if w != nil {
+			w.enterSizeMove()
+		}
+	case wmExitSizeMove:
+		if w != nil {
+			w.exitSizeMove()
+		}
+	case wmTimer:
+		if w != nil {
+			w.onTimer(wp)
+			return 0
+		}
 	case wmSysCommand:
 		if w != nil {
+			if w.onSysCommand(wp, lp) {
+				return 0
+			}
 			if id, ok := w.a.bookmarkForCommand(wp); ok {
 				w.a.post(func() { w.a.openFromExternal(id) })
 				return 0
@@ -710,23 +754,36 @@ func (w *Window) trackPointer(kind, edge string, x0, y0, x, y float64) {
 	if kind == "resize" && isZoomed(w.hwnd) {
 		return
 	}
+	s := w.scale()
+	dx := int32(math.Round((x - x0) * s))
+	dy := int32(math.Round((y - y0) * s))
 	sx0, sy0 := int32(math.Round(x0)), int32(math.Round(y0))
 	key := kind
 	if kind == "resize" {
 		key += ":" + edge
 	}
 	if w.grab.key != key || w.grab.x0 != sx0 || w.grab.y0 != sy0 {
+		if dx == 0 && dy == 0 {
+			return
+		}
 		if w.menu != nil {
 			w.menu.hide()
 		}
+		orig := windowRect(w.hwnd)
 		if kind == "drag" && isZoomed(w.hwnd) {
+			var cur point
+			pGetCursorPos.Call(ptr(&cur))
+			maxW := max(orig.W(), 1)
+			frac := float64(cur.X-orig.Left) / float64(maxW)
 			pShowWindow.Call(w.hwnd, swRestore)
+			orig = windowRect(w.hwnd)
+			// the pointer has already moved by dx/dy, which is added back below
+			left := cur.X - int32(math.Round(frac*float64(orig.W()))) - dx
+			top := cur.Y - int32(math.Round(float64(barHeightDIP/2)*s)) - dy
+			orig = rect{Left: left, Top: top, Right: left + orig.W(), Bottom: top + orig.H()}
 		}
-		w.grab = pointerGrab{key: key, x0: sx0, y0: sy0, orig: windowRect(w.hwnd)}
+		w.grab = pointerGrab{key: key, x0: sx0, y0: sy0, orig: orig}
 	}
-	s := w.scale()
-	dx := int32(math.Round((x - x0) * s))
-	dy := int32(math.Round((y - y0) * s))
 	if dx == 0 && dy == 0 {
 		return
 	}

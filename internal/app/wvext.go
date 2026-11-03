@@ -123,14 +123,12 @@ func comCall(obj uintptr, idx int, args ...uintptr) uintptr {
 }
 
 // enableTitlebarDrag turns on ICoreWebView2Settings9 non-client region
-// support. CSS app-region:drag then runs the window move loop on Chromium's
-// thread, which is the thread that owns the mouse capture.
+// support. CSS app-region:drag then lets the window move with the system move
+// loop, so it snaps to screen edges and shows Snap Assist.
 //
-// Posting WM_NCLBUTTONDOWN from this process does not work: ReleaseCapture
-// only affects this thread, Chromium keeps the capture, and DefWindowProc's
-// modal loop never observes button-up. It then sits forever, swallowing every
-// later click on the title bar. Hover still updates, because that is painted
-// on Chromium's thread.
+// WebView2 implements this with a transparent child window on this thread
+// that answers HTCAPTION over the drag regions. The move loop it starts runs
+// here; the watchdog in sizemove.go ends one that misses the button-up.
 func enableTitlebarDrag(c *edge.Chromium) bool {
 	s, err := c.GetSettings()
 	if err != nil || s == nil {

@@ -11,6 +11,7 @@ var (
 	dwmapi   = windows.NewLazySystemDLL("dwmapi.dll")
 	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
 	shell32  = windows.NewLazySystemDLL("shell32.dll")
+	gdi32    = windows.NewLazySystemDLL("gdi32.dll")
 
 	pRegisterClassExW         = user32.NewProc("RegisterClassExW")
 	pCreateWindowExW          = user32.NewProc("CreateWindowExW")
@@ -29,7 +30,9 @@ var (
 	pIsZoomed                 = user32.NewProc("IsZoomed")
 	pIsIconic                 = user32.NewProc("IsIconic")
 	pGetDpiForWindow          = user32.NewProc("GetDpiForWindow")
+	pGetSystemMetrics         = user32.NewProc("GetSystemMetrics")
 	pGetSystemMetricsForDpi   = user32.NewProc("GetSystemMetricsForDpi")
+	pGetAsyncKeyState         = user32.NewProc("GetAsyncKeyState")
 	pLoadImageW               = user32.NewProc("LoadImageW")
 	pLoadCursorW              = user32.NewProc("LoadCursorW")
 	pGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
@@ -60,7 +63,16 @@ var (
 	pRegisterWindowMessageW   = user32.NewProc("RegisterWindowMessageW")
 	pAllowSetForegroundWindow = user32.NewProc("AllowSetForegroundWindow")
 	pGetDpiForSystem          = user32.NewProc("GetDpiForSystem")
-	pCreateSolidBrush         = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateSolidBrush")
+	pSetTimer                 = user32.NewProc("SetTimer")
+	pKillTimer                = user32.NewProc("KillTimer")
+	pEnumChildWindows         = user32.NewProc("EnumChildWindows")
+	pGetClassNameW            = user32.NewProc("GetClassNameW")
+	pGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	pGetWindowLongPtrW        = user32.NewProc("GetWindowLongPtrW")
+	pSetWindowRgn             = user32.NewProc("SetWindowRgn")
+	pCreateRectRgn            = gdi32.NewProc("CreateRectRgn")
+	pDeleteObject             = gdi32.NewProc("DeleteObject")
+	pCreateSolidBrush         = gdi32.NewProc("CreateSolidBrush")
 	pDwmSetWindowAttribute    = dwmapi.NewProc("DwmSetWindowAttribute")
 	pGetModuleHandleW         = kernel32.NewProc("GetModuleHandleW")
 	pShellExecuteW            = shell32.NewProc("ShellExecuteW")
@@ -83,6 +95,12 @@ const (
 	wmNCHitTest     = 0x0084
 	wmSysCommand    = 0x0112
 	wmMoving        = 0x0216
+	wmTimer         = 0x0113
+	wmEnterSizeMove = 0x0231
+	wmExitSizeMove  = 0x0232
+	wmCaptureChange = 0x0215
+	wmMouseMove     = 0x0200
+	wmLButtonDown   = 0x0201
 	wmDpiChanged    = 0x02E0
 	wmSettingChange = 0x001A
 	wmLButtonUp     = 0x0202
@@ -94,6 +112,8 @@ const (
 	wsClipChildren     = 0x02000000
 	wsExToolWindow     = 0x00000080
 	wsExNoActivate     = 0x08000000
+	wsExTransparent    = 0x00000020
+	gwlExStyle         = ^uintptr(19) // GWL_EXSTYLE (-20)
 
 	csHRedraw    = 0x0002
 	csVRedraw    = 0x0001

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/url"
 	"os"
@@ -21,7 +22,7 @@ import (
 
 type inMsg struct {
 	T                    string `json:"t"`
-	X, Y, H              float64
+	X, Y, W, H           float64
 	X0, Y0               float64
 	Edge                 string           `json:"edge"`
 	Where                string           `json:"where"`
@@ -74,7 +75,10 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 		})
 	case "gestureEnd":
 		a.post(func() { w.grab.key = "" })
+	case "dragArea":
+		w.dragArea(m.X, m.Y, m.W, m.H)
 	case "min", "max":
+		log.Printf("caption: %s", m.T)
 		// ShowWindow pumps window messages; leave the WebView2 callback first.
 		a.post(func() {
 			if w.closing {
@@ -87,9 +91,16 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 			}
 		})
 	case "close":
+		log.Printf("caption: close")
 		pPostMessageW.Call(w.hwnd, wmClose, 0, 0)
 	case "sysmenu":
-		w.showSystemMenu()
+		// TrackPopupMenu runs a modal loop; inside this webview callback it
+		// would hold back every other WebView2 event until the menu closes
+		a.post(func() {
+			if !w.closing {
+				w.showSystemMenu()
+			}
+		})
 
 	// --- dropdown ---
 	case "menu":
