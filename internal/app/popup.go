@@ -70,7 +70,9 @@ func newPopup(w *Window) *popup {
 
 	p.wv = a.newChromium()
 	p.wv.MessageCallback = func(m string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMessageReceivedEventArgs) {
-		w.onMessage(true, m)
+		a.inWVCallback(func() {
+			a.post(func() { w.onMessage(true, m) })
+		})
 	}
 	p.wv.Embed(h)
 	p.wv.SetBackgroundColour(r, g, b, 255)
@@ -85,7 +87,7 @@ func newPopup(w *Window) *popup {
 func (p *popup) setRasterScale(s float64) { putRasterScale(p.wv, s) }
 
 func (p *popup) toggle(kind string, xCSS, yCSS float64) {
-	if p.hwnd == 0 || !p.ready {
+	if p == nil || p.hwnd == 0 || !p.ready {
 		return
 	}
 	if _, ok := popupWidths[kind]; !ok || centeredPanels[kind] {
@@ -114,7 +116,7 @@ func (p *popup) toggle(kind string, xCSS, yCSS float64) {
 // openPanel shows the link manager or editor, also when switching to it from
 // another panel of this popup.
 func (p *popup) openPanel(kind, arg string) {
-	if p.hwnd == 0 || !p.ready || (!centeredPanels[kind] && kind != "certificate" && kind != "links") {
+	if p == nil || p.hwnd == 0 || !p.ready || (!centeredPanels[kind] && kind != "certificate" && kind != "links") {
 		return
 	}
 	p.arg = arg
@@ -175,7 +177,7 @@ func (p *popup) place() {
 
 // sized receives the content height the page measured for a dropdown kind.
 func (p *popup) sized(kind string, hCSS float64) {
-	if kind != p.kind || hCSS <= 0 {
+	if p == nil || kind != p.kind || hCSS <= 0 {
 		return
 	}
 	p.heightCSS = hCSS

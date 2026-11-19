@@ -45,6 +45,7 @@ type inMsg struct {
 }
 
 // onMessage handles a message from this window's UI view or dropdown.
+// Callers always post it out of the WebView2 event handler first.
 func (w *Window) onMessage(fromMenu bool, raw string) {
 	if w.closing {
 		return
@@ -57,7 +58,9 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 	switch m.T {
 	case "ready":
 		if fromMenu {
-			w.menu.ready = true
+			if w.menu != nil {
+				w.menu.ready = true
+			}
 		} else {
 			w.uiReady = true
 		}
@@ -65,42 +68,23 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 
 	// --- window chrome ---
 	case "drag", "resize":
-		// SetWindowPos / ShowWindow pump messages; leave the webview callback first.
-		kind, edge := m.T, m.Edge
-		x0, y0, x, y := m.X0, m.Y0, m.X, m.Y
-		a.post(func() {
-			if !w.closing {
-				w.trackPointer(kind, edge, x0, y0, x, y)
-			}
-		})
+		w.trackPointer(m.T, m.Edge, m.X0, m.Y0, m.X, m.Y)
 	case "gestureEnd":
-		a.post(func() { w.grab.key = "" })
+		w.grab.key = ""
 	case "dragArea":
 		w.dragArea(m.X, m.Y, m.W, m.H)
 	case "min", "max":
 		log.Printf("caption: %s", m.T)
-		// ShowWindow pumps window messages; leave the WebView2 callback first.
-		a.post(func() {
-			if w.closing {
-				return
-			}
-			if m.T == "min" {
-				pShowWindow.Call(w.hwnd, swMinimize)
-			} else {
-				w.toggleMaximize()
-			}
-		})
+		if m.T == "min" {
+			pShowWindow.Call(w.hwnd, swMinimize)
+		} else {
+			w.toggleMaximize()
+		}
 	case "close":
 		log.Printf("caption: close")
 		pPostMessageW.Call(w.hwnd, wmClose, 0, 0)
 	case "sysmenu":
-		// TrackPopupMenu runs a modal loop; inside this webview callback it
-		// would hold back every other WebView2 event until the menu closes
-		a.post(func() {
-			if !w.closing {
-				w.showSystemMenu()
-			}
-		})
+		w.showSystemMenu()
 
 	// --- dropdown ---
 	case "menu":
@@ -118,22 +102,14 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 		w.showPage(m.Page, m.Arg)
 	case "open":
 		w.menu.hide()
-		// opening may move and resize this window; do it after the webview
-		// callback that delivered the message has returned, not inside it
-		id, where := m.ID, m.Where
-		a.post(func() {
-			if w.closing {
-				return
-			}
-			switch where {
-			case "current":
-				a.openHere(w, id)
-			case "new":
-				a.openNew(w, id)
-			default:
-				a.open(w, id)
-			}
-		})
+		switch m.Where {
+		case "current":
+			a.openHere(w, m.ID)
+		case "new":
+			a.openNew(w, m.ID)
+		default:
+			a.open(w, m.ID)
+		}
 	case "deleteLink":
 		// from the dropdown: it stays open, so the main window keeps its page
 		if a.removeBookmark(m.ID) {
@@ -197,10 +173,9 @@ func (w *Window) onMessage(fromMenu bool, raw string) {
 	case "deleteCA":
 		a.deleteCA(w, m.ID)
 	case "exportConfig":
-		// the file dialog is modal; run it outside the webview callback
-		a.post(func() { a.exportConfig(w) })
+		a.exportConfig(w)
 	case "importConfig":
-		a.post(func() { a.importConfig(w) })
+		a.importConfig(w)
 	case "checkUpdate":
 		a.checkForUpdates(w)
 	case "installUpdate":
@@ -393,8 +368,8 @@ func (a *App) saveBookmark(w *Window, b *config.Bookmark, open bool, back string
 	a.applyRecords()
 	a.save()
 	if open {
-		// a window already showing a site gets a new one; opening may move
-		// and resize windows, so leave the webview callback first
+		// a window already showing a site gets a new one; finish the toast and
+		// state push before moving or creating windows
 		w.menu.hide()
 		id := b.ID
 		a.post(func() {

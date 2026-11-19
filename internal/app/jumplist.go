@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -18,19 +19,21 @@ import (
 const appUserModelID = "IntraWebApps.Intra"
 
 const (
-	clsctxInprocServer = 1
-	coinitApartment    = 2
-	vtLPWSTR           = 31
-	swShowNormalLink   = 1
-	mfByCommand        = 0x0000
-	mfByPosition       = 0x0400
-	mfSeparator        = 0x0800
-	mfString           = 0x0000
+	clsctxInprocServer   = 1
+	coinitApartment      = 2
+	coinitDisableOle1DDE = 4
+	vtLPWSTR             = 31
+	swShowNormalLink     = 1
+	mfByCommand          = 0x0000
+	mfByPosition         = 0x0400
+	mfSeparator          = 0x0800
+	mfString             = 0x0000
 )
 
 var (
 	ole32                                    = windows.NewLazySystemDLL("ole32.dll")
 	pCoInitializeEx                          = ole32.NewProc("CoInitializeEx")
+	pCoUninitialize                          = ole32.NewProc("CoUninitialize")
 	pCoCreateInstance                        = ole32.NewProc("CoCreateInstance")
 	pSetCurrentProcessExplicitAppUserModelID = shell32.NewProc("SetCurrentProcessExplicitAppUserModelID")
 	pSHGetPropertyStoreForWindow             = shell32.NewProc("SHGetPropertyStoreForWindow")
@@ -122,11 +125,56 @@ func setPropString(store uintptr, key propertyKey, value string) bool {
 	return comCall(store, 7) == 0
 }
 
+// jumpListPublisher updates the taskbar jump list on a dedicated STA thread so
+// Shell COM calls and disk writes never block or pump messages on the UI thread.
+type jumpListPublisher struct {
+	mu      sync.Mutex
+	cond    *sync.Cond
+	pending []config.Bookmark
+	dirty   bool
+}
+
+func newJumpListPublisher() *jumpListPublisher {
+	j := &jumpListPublisher{}
+	j.cond = sync.NewCond(&j.mu)
+	go j.loop()
+	return j
+}
+
+func (j *jumpListPublisher) publish(bs []config.Bookmark) {
+	cp := make([]config.Bookmark, len(bs))
+	copy(cp, bs)
+	j.mu.Lock()
+	j.pending = cp
+	j.dirty = true
+	j.mu.Unlock()
+	j.cond.Signal()
+}
+
+func (j *jumpListPublisher) loop() {
+	runtime.LockOSThread()
+	ensureCOM()
+	for {
+		j.mu.Lock()
+		for !j.dirty {
+			j.cond.Wait()
+		}
+		bs := j.pending
+		j.pending = nil
+		j.dirty = false
+		j.mu.Unlock()
+
+		publishJumpList(bs)
+	}
+}
+
 // syncLinkShortcuts republishes the current bookmarks on the taskbar jump
 // list and on every window's system menu.
 func (a *App) syncLinkShortcuts() {
 	a.bookmarkCmds = append([]string(nil), bookmarkIDs(a.cfg.Bookmarks)...)
-	publishJumpList(a.cfg.Bookmarks)
+	if a.jumpList != nil {
+		a.jumpList.publish(a.cfg.Bookmarks)
+	}
 	for _, w := range a.windows {
 		if w.hwnd != 0 && !w.closing {
 			w.fillBookmarkMenu(a.cfg.Bookmarks)

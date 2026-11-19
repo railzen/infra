@@ -112,6 +112,7 @@ func TestRemoveBookmark(t *testing.T) {
 	if len(a.cfg.Bookmarks) != 1 || a.cfg.Bookmarks[0].ID != "b" || a.cfg.DefaultPage != "home" || a.cfg.LastBookmark != "" {
 		t.Fatalf("after remove: %+v", a.cfg)
 	}
+	a.saver.flush(a.cfg.Clone())
 }
 
 func TestMoveBookmark(t *testing.T) {
@@ -143,6 +144,7 @@ func TestMoveBookmark(t *testing.T) {
 			t.Fatalf("move %s to %d: got %s, want %s", c.id, c.to, got, c.want)
 		}
 	}
+	a.saver.flush(a.cfg.Clone())
 }
 
 func TestAddressURL(t *testing.T) {

@@ -127,7 +127,9 @@ func (w *Window) embed() {
 	// --- UI: title bar + pages ---
 	w.ui = a.newChromium()
 	w.ui.MessageCallback = func(m string, _ *edge.ICoreWebView2, _ *edge.ICoreWebView2WebMessageReceivedEventArgs) {
-		w.onMessage(false, m)
+		a.inWVCallback(func() {
+			a.post(func() { w.onMessage(false, m) })
+		})
 	}
 	w.ui.Embed(w.hwnd)
 	r, g, b := a.bgColor()
@@ -166,50 +168,97 @@ func (w *Window) hookSite() {
 	if wv == 0 {
 		return
 	}
+	a := w.a
 	vt := wv.vt()
 	wv.on(vt.AddDocumentTitleChanged, func(_, _ uintptr) {
-		if w.cur != nil {
-			w.cur.Title = wv.Title()
-			w.updateTitle()
-			w.push()
-		}
+		a.inWVCallback(func() {
+			cur := w.cur
+			if w.closing || cur == nil {
+				return
+			}
+			a.post(func() {
+				if !w.closing && w.cur == cur {
+					w.cur.Title = wv.Title()
+					w.updateTitle()
+					w.push()
+				}
+			})
+		})
 	})
 	wv.on(vt.AddHistoryChanged, func(_, _ uintptr) {
-		if w.cur != nil {
-			w.cur.CanBack, w.cur.CanFwd = wv.CanGoBack(), wv.CanGoForward()
-			w.push()
-		}
+		a.inWVCallback(func() {
+			cur := w.cur
+			if w.closing || cur == nil {
+				return
+			}
+			a.post(func() {
+				if !w.closing && w.cur == cur {
+					w.cur.CanBack, w.cur.CanFwd = wv.CanGoBack(), wv.CanGoForward()
+					w.push()
+				}
+			})
+		})
 	})
 	wv.on(vt.AddSourceChanged, func(_, _ uintptr) {
-		if w.cur != nil {
-			w.cur.URL = wv.Source()
-			w.push() // the address field in the links dropdown shows it
-		}
+		a.inWVCallback(func() {
+			cur := w.cur
+			if w.closing || cur == nil {
+				return
+			}
+			a.post(func() {
+				if !w.closing && w.cur == cur {
+					w.cur.URL = wv.Source()
+					w.push() // the address field in the links dropdown shows it
+				}
+			})
+		})
 	})
 	wv.on(vt.AddNavigationStarting, func(_, _ uintptr) {
-		if w.cur != nil && !w.cur.Loading {
-			w.cur.Loading = true
-			w.push()
-		}
+		a.inWVCallback(func() {
+			cur := w.cur
+			if w.closing || cur == nil {
+				return
+			}
+			a.post(func() {
+				if !w.closing && w.cur == cur && !w.cur.Loading {
+					w.cur.Loading = true
+					w.push()
+				}
+			})
+		})
 	})
 	w.site.NavigationCompletedCallback = func(_ *edge.ICoreWebView2, _ *edge.ICoreWebView2NavigationCompletedEventArgs) {
-		if w.cur != nil {
-			w.cur.Loading = false
-			w.cur.CanBack, w.cur.CanFwd = wv.CanGoBack(), wv.CanGoForward()
-			w.push()
-		}
+		a.inWVCallback(func() {
+			cur := w.cur
+			if w.closing || cur == nil {
+				return
+			}
+			a.post(func() {
+				if !w.closing && w.cur == cur {
+					w.cur.Loading = false
+					w.cur.CanBack, w.cur.CanFwd = wv.CanGoBack(), wv.CanGoForward()
+					w.push()
+				}
+			})
+		})
 	}
 	// keep window.open / target=_blank inside the app window
 	wv.on(vt.AddNewWindowRequested, func(_, args uintptr) {
-		uri := newWindowURI(args)
-		newWindowHandled(args)
-		low := strings.ToLower(uri)
-		switch {
-		case strings.HasPrefix(low, "http://"), strings.HasPrefix(low, "https://"):
-			w.site.Navigate(uri)
-		case uri != "" && !strings.HasPrefix(low, "javascript:") && !strings.HasPrefix(low, "file:"):
-			shellOpen(uri)
-		}
+		a.inWVCallback(func() {
+			uri := newWindowURI(args)
+			newWindowHandled(args)
+			low := strings.ToLower(uri)
+			switch {
+			case strings.HasPrefix(low, "http://"), strings.HasPrefix(low, "https://"):
+				a.post(func() {
+					if !w.closing && w.site != nil {
+						w.site.Navigate(uri)
+					}
+				})
+			case uri != "" && !strings.HasPrefix(low, "javascript:") && !strings.HasPrefix(low, "file:"):
+				shellOpenAsync(uri)
+			}
+		})
 	})
 }
 

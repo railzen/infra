@@ -1,6 +1,7 @@
 package app
 
 import (
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -291,6 +292,20 @@ func messageBox(hwnd uintptr, text, title string, flags uint32) int {
 
 func shellOpen(target string) {
 	pShellExecuteW.Call(0, ptr(u16("open")), ptr(u16(target)), 0, 0, swShowNormal)
+}
+
+// shellOpenAsync launches an external URI off the UI thread with its own STA
+// apartment so ShellExecuteW cannot block or pump messages on the UI thread.
+func shellOpenAsync(target string) {
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		hr, _, _ := pCoInitializeEx.Call(0, coinitApartment|coinitDisableOle1DDE)
+		if hr == 0 || hr == 1 { // S_OK or S_FALSE
+			defer pCoUninitialize.Call()
+		}
+		shellOpen(target)
+	}()
 }
 
 func setDwmAttr(hwnd uintptr, attr uint32, val int32) {

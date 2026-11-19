@@ -207,11 +207,14 @@ func (e *Chromium) Embed(hwnd uintptr) bool {
 			0,
 			0,
 		)
-		if r == 0 {
+		if r == 0 || int32(r) == -1 {
 			break
 		}
 		w32.User32TranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		w32.User32DispatchMessageW.Call(uintptr(unsafe.Pointer(&msg)))
+	}
+	if e.webview == nil {
+		return false
 	}
 	e.Init("window.external={invoke:s=>window.chrome.webview.postMessage(s)}")
 	return true
@@ -314,9 +317,8 @@ func (e *Chromium) EnvironmentCompleted(res uintptr, env *ICoreWebView2Environme
 	if env == nil {
 		err := syscall.Errno(res)
 		log.Printf("[WebView2] Environment creation failed with error code %v: %v\n", res, err)
-		if e.globalErrorCallback != nil {
-			e.globalErrorCallback(fmt.Errorf("failed to create WebView2 environment: %w", err))
-		}
+		e.errorCallback(fmt.Errorf("failed to create WebView2 environment: %w", err))
+		atomic.StoreUintptr(&e.inited, 1)
 		return res
 	}
 
@@ -418,17 +420,18 @@ func (e *Chromium) MessageReceived(sender *ICoreWebView2, args *ICoreWebView2Web
 		if obj != nil && e.MessageWithAdditionalObjectsCallback != nil {
 			defer obj.Release()
 			e.MessageWithAdditionalObjectsCallback(message, sender, args)
-		} else if e.MessageCallback != nil {
-			e.MessageCallback(message, sender, args)
+		} else {
+			if obj != nil {
+				obj.Release()
+			}
+			if e.MessageCallback != nil {
+				e.MessageCallback(message, sender, args)
+			}
 		}
 	} else if e.MessageCallback != nil {
 		e.MessageCallback(message, sender, args)
 	}
 
-	err = sender.PostWebMessageAsString(message)
-	if err != nil && !errors.Is(err, windows.ERROR_IO_PENDING) {
-		e.errorCallback(err)
-	}
 	return 0
 }
 

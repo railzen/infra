@@ -53,8 +53,10 @@ type App struct {
 	qmu        sync.Mutex
 	queue      []func()
 	queueEvent windows.Handle // set by post; see messageLoop
+	inCallback int            // nesting depth of active WebView2 callbacks on the UI thread
 
 	saver        *saver
+	jumpList     *jumpListPublisher
 	bookmarkCmds []string // system-menu command index -> bookmark id
 
 	trayHwnd  uintptr // hidden owner of the notification-area icon
@@ -124,6 +126,7 @@ func Run(version string) {
 			}
 		})
 	})
+	a.jumpList = newJumpListPublisher()
 	a.applyTrust()
 	a.applyRecords()
 
@@ -309,11 +312,45 @@ func (a *App) post(fn func()) {
 	a.qmu.Lock()
 	a.queue = append(a.queue, fn)
 	a.qmu.Unlock()
-	windows.SetEvent(a.queueEvent)
-	pPostMessageW.Call(a.msgHwnd, wmAppCall, 0, 0)
+	if a.queueEvent != 0 {
+		windows.SetEvent(a.queueEvent)
+	}
+	if a.msgHwnd != 0 {
+		pPostMessageW.Call(a.msgHwnd, wmAppCall, 0, 0)
+	}
+}
+
+func (a *App) hasQueued() bool {
+	a.qmu.Lock()
+	n := len(a.queue)
+	a.qmu.Unlock()
+	return n > 0
+}
+
+// inWVCallback marks the execution of a WebView2 event handler on the UI
+// thread. While any callback is active, runQueue refuses to drain queued work
+// so a nested message pump dispatching wmAppCall cannot pull Embed() or modal
+// dialogs into the WebView2 callback stack.
+func (a *App) inWVCallback(fn func()) {
+	a.inCallback++
+	defer func() {
+		a.inCallback--
+		if a.inCallback == 0 && a.hasQueued() {
+			if a.queueEvent != 0 {
+				windows.SetEvent(a.queueEvent)
+			}
+			if a.msgHwnd != 0 {
+				pPostMessageW.Call(a.msgHwnd, wmAppCall, 0, 0)
+			}
+		}
+	}()
+	fn()
 }
 
 func (a *App) runQueue() {
+	if a.inCallback > 0 {
+		return
+	}
 	a.qmu.Lock()
 	q := a.queue
 	a.queue = nil
