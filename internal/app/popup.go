@@ -172,7 +172,11 @@ func (p *popup) place() {
 	pGetMonitorInfoW.Call(mon, ptr(&mi))
 	h = min(h, mi.Work.Bottom-pt.Y-int32(8*s))
 	x := max(min(pt.X, mi.Work.Right-w-int32(4*s)), mi.Work.Left+int32(4*s))
-	pSetWindowPos.Call(p.hwnd, 0, uintptr(x), uintptr(pt.Y), uintptr(w), uintptr(max(h, int32(40*s))), swpNoActivate)
+	// Leave the z-order alone: raising the popup here pulls its owner up
+	// right beneath it, and on Windows 10 that covers the CS_DROPSHADOW
+	// shadow window, so the first dropdown shows without a shadow.
+	// ShowWindow already brings the popup to the front.
+	pSetWindowPos.Call(p.hwnd, 0, uintptr(x), uintptr(pt.Y), uintptr(w), uintptr(max(h, int32(40*s))), swpNoZOrder|swpNoActivate)
 }
 
 // sized receives the content height the page measured for a dropdown kind.
